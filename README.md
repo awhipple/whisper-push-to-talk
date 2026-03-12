@@ -63,81 +63,11 @@ Look for your microphone in the output. It will look something like:
 "Microphone (Realtek(R) Audio)" (audio)
 ```
 
-Copy the exact name — you'll need it for the script if it differs from the default.
+Copy the exact name and set it as the `MIC_NAME` value at the top of the script. If `"default"` works for you, no change is needed.
 
 ### The Script
 
-Save the following as `whisper-voice-to-text.ahk`:
-
-```ahk
-#Requires AutoHotkey v2.0
-#SingleInstance Force
-
-; ============================================================
-; CONFIG — Update these paths to match your setup
-; ============================================================
-global WHISPER_EXE := "C:\tools\whisper\whisper-cli.exe"
-global WHISPER_MODEL := "C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin"
-global RECORDING_FILE := A_Temp . "\whisper_recording.wav"
-global FIXED_FILE := A_Temp . "\whisper_fixed.wav"
-
-; If your mic name is different, update this:
-global MIC_NAME := "default"
-; ============================================================
-
-global recording := false
-
-F11::
-{
-    global recording, RECORDING_FILE, MIC_NAME
-    if recording
-        return
-    recording := true
-
-    try FileDelete(RECORDING_FILE)
-
-    Run('sox -t waveaudio ' . MIC_NAME . ' -r 16000 -c 1 -b 16 "' . RECORDING_FILE . '"', , "Hide")
-    Sleep 300
-    ToolTip "Recording..."
-}
-
-F11 Up::
-{
-    global recording, RECORDING_FILE, FIXED_FILE, WHISPER_EXE, WHISPER_MODEL
-    if !recording
-        return
-    recording := false
-    ToolTip
-
-    ; Kill sox
-    shell := ComObject("WScript.Shell")
-    shell.Run("taskkill /im sox.exe /f", 0, true)
-    Sleep 500
-
-    ; Verify recording exists
-    try {
-        size := FileGetSize(RECORDING_FILE)
-        if (size = 0)
-            return
-    } catch
-        return
-
-    ; Fix WAV header with ffmpeg (sox header is corrupted by force kill)
-    try FileDelete(FIXED_FILE)
-    shell.Run('ffmpeg -y -i "' . RECORDING_FILE . '" -c copy "' . FIXED_FILE . '"', 0, true)
-
-    ; Run whisper
-    exec := shell.Exec(WHISPER_EXE . ' -m ' . WHISPER_MODEL . ' -l en -nt -f "' . FIXED_FILE . '"')
-    raw := exec.StdOut.ReadAll()
-
-    text := RegExReplace(raw, "^\s+|\s+$", "")
-    if (text != "") {
-        A_Clipboard := text
-        Sleep 100
-        Send("^v")
-    }
-}
-```
+The script is included in this repo as `whisper-voice-to-text.ahk`. Open it and update the config variables at the top to match your setup before running.
 
 ### Changing the Hotkey
 
@@ -146,6 +76,16 @@ Replace `F11` and `F11 Up` with any key you prefer. See the [AHK v2 key list](ht
 ### Changing the Language
 
 Replace `-l en` in the whisper command with your language code (e.g., `-l es` for Spanish, `-l fr` for French). Remove `-l en` entirely to let whisper auto-detect the language.
+
+## Run on Startup
+
+The script won't start automatically after a reboot unless you configure it to. The easiest way:
+
+1. Press **Win + R**, type `shell:startup`, and hit Enter — this opens your Startup folder
+2. Right-click `whisper-voice-to-text.ahk` → **Create shortcut**
+3. Move the shortcut into the Startup folder
+
+The script will now launch automatically every time you log in.
 
 ## Usage
 
