@@ -14,8 +14,26 @@ global MIC_NAME := "default"
 ; ============================================================
 
 global recording := false
+global autoSubmit := false
 
 F11::
+{
+    global autoSubmit
+    autoSubmit := false
+    StartRecording()
+}
+
+F12::
+{
+    global autoSubmit
+    autoSubmit := true
+    StartRecording()
+}
+
+F11 Up::StopRecording()
+F12 Up::StopRecording()
+
+StartRecording()
 {
     global recording, RECORDING_FILE, MIC_NAME
     if recording
@@ -29,9 +47,9 @@ F11::
     ToolTip "Recording..."
 }
 
-F11 Up::
+StopRecording()
 {
-    global recording, RECORDING_FILE, FIXED_FILE, WHISPER_EXE, WHISPER_MODEL
+    global recording, autoSubmit, RECORDING_FILE, FIXED_FILE, WHISPER_EXE, WHISPER_MODEL
     if !recording
         return
     recording := false
@@ -63,5 +81,9 @@ F11 Up::
         A_Clipboard := text
         Sleep 100
         Send("^v")
+        if autoSubmit {
+            Sleep 300
+            SendEvent("{Enter}")
+        }
     }
 }

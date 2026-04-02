@@ -1,11 +1,14 @@
 # Voice-to-Text with Whisper + AutoHotkey
 
-Push-to-talk voice transcription on Windows. Hold F11, speak, release — your words get typed into whatever app has focus.
+Push-to-talk voice transcription on Windows. Hold a key, speak, release — your words get typed into whatever app has focus.
+
+- **F11** — hold to record, pastes the transcribed text
+- **F12** — same thing, but also presses Enter after pasting
 
 ## How It Works
 
-1. **F11 held down** → Sox starts recording from your microphone
-2. **F11 released** → Sox stops, ffmpeg fixes the WAV header, whisper.cpp transcribes the audio, and the text is pasted at your cursor
+1. Hold **F11** or **F12** → Sox starts recording from your microphone
+2. Release the key → Sox stops, ffmpeg fixes the WAV header, whisper.cpp transcribes the audio, and the text is pasted at your cursor
 
 ## Prerequisites
 
@@ -71,7 +74,7 @@ The script is included in this repo as `whisper-voice-to-text.ahk`. Open it and 
 
 ### Changing the Hotkey
 
-Replace `F11` and `F11 Up` with any key you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
+Replace the hotkey definitions (`F11`, `F12`, and their `Up` counterparts) with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
 
 ### Changing the Language
 
@@ -91,9 +94,9 @@ The script will now launch automatically every time you log in.
 
 1. Double-click `whisper-voice-to-text.ahk` to start the script (you'll see an "H" icon in your system tray)
 2. Click into any text field — a browser, editor, chat window, etc.
-3. Hold **F11** and wait for the "Recording..." tooltip to appear
+3. Hold **F11** or **F12** and wait for the "Recording..." tooltip to appear
 4. Speak your text
-5. Release **F11** — after a moment, the transcribed text will be pasted at your cursor
+5. Release the key — the transcribed text will be pasted at your cursor (F12 also presses Enter)
 
 ## Troubleshooting
 
