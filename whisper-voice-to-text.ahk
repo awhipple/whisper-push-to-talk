@@ -78,6 +78,7 @@ StopRecording()
 
     text := RegExReplace(raw, "^\s+|\s+$", "")
     if (text != "") {
+        prevClip := ClipboardAll()
         A_Clipboard := text
         Sleep 100
         Send("^v")
@@ -85,5 +86,7 @@ StopRecording()
             Sleep 300
             SendEvent("{Enter}")
         }
+        Sleep 100
+        A_Clipboard := prevClip
     }
 }
