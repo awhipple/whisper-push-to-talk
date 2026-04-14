@@ -43,8 +43,11 @@ Download and install from https://www.autohotkey.com/. Make sure you install **v
 ### 4. Whisper.cpp (speech-to-text)
 
 1. Download the latest release from https://github.com/ggerganov/whisper.cpp/releases
-   - Grab the Windows binary (e.g., `whisper-cli.exe`)
-2. Place it somewhere (e.g., `C:\tools\whisper\whisper-cli.exe`)
+   - You'll need to expand the **Assets** section at the bottom of the release to see all download options
+   - **NVIDIA GPU (recommended):** Download `whisper-cublas-12.4.0-bin-x64.zip` for CUDA 12.x, or `whisper-cublas-11.8.0-bin-x64.zip` for CUDA 11.x — these use your GPU for much faster transcription
+   - **CPU only (no NVIDIA GPU):** Download `whisper-bin-x64.zip` for a basic 64-bit build, or `whisper-blas-bin-x64.zip` for a CPU-optimized build using OpenBLAS
+   - **32-bit Windows:** Use the `Win32` variants instead (`whisper-bin-Win32.zip` or `whisper-blas-bin-Win32.zip`)
+2. Extract the zip and place the contents somewhere (e.g., `C:\tools\whisper\`)
 3. Download a model file — recommended: `ggml-large-v3-turbo-q8_0.bin`
    - Models are available from https://huggingface.co/ggerganov/whisper.cpp/tree/main
    - Smaller models (base, small, medium) are faster but less accurate
