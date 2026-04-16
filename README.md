@@ -99,7 +99,7 @@ The script will now launch automatically every time you log in.
 2. Click into any text field — a browser, editor, chat window, etc.
 3. Hold **F11** or **F12** and wait for the "Recording..." tooltip to appear
 4. Speak your text
-5. Release the key — the transcribed text will be pasted at your cursor (F12 also presses Enter)
+5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is pasted at your cursor (F12 also presses Enter)
 
 ## Troubleshooting
 

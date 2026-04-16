@@ -8,6 +8,7 @@ global WHISPER_EXE := "C:\tools\whisper\whisper-cli.exe"
 global WHISPER_MODEL := "C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin"
 global RECORDING_FILE := A_Temp . "\whisper_recording.wav"
 global FIXED_FILE := A_Temp . "\whisper_fixed.wav"
+global WHISPER_OUT := A_Temp . "\whisper_out"
 
 ; If your mic name is different, update this:
 global MIC_NAME := "default"
@@ -72,9 +73,16 @@ StopRecording()
     try FileDelete(FIXED_FILE)
     shell.Run('ffmpeg -y -i "' . RECORDING_FILE . '" -c copy "' . FIXED_FILE . '"', 0, true)
 
-    ; Run whisper
-    exec := shell.Exec(WHISPER_EXE . ' -m ' . WHISPER_MODEL . ' -l en -nt -f "' . FIXED_FILE . '"')
-    raw := exec.StdOut.ReadAll()
+    ; Run whisper (hidden window, output to file to avoid stealing focus)
+    ToolTip "Processing..."
+    try FileDelete(WHISPER_OUT . ".txt")
+    shell.Run(WHISPER_EXE . ' -m ' . WHISPER_MODEL . ' -l en -nt -otxt -of "' . WHISPER_OUT . '" -f "' . FIXED_FILE . '"', 0, true)
+    ToolTip
+
+    try
+        raw := FileRead(WHISPER_OUT . ".txt")
+    catch
+        return
 
     text := RegExReplace(raw, "^\s+|\s+$", "")
     if (text != "") {
