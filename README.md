@@ -101,6 +101,8 @@ The script will now launch automatically every time you log in.
 4. Speak your text
 5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is pasted at your cursor (F12 also presses Enter)
 
+If you release the key too quickly (under 1 second) or the recording is silent, the script skips transcription entirely. This prevents whisper from hallucinating text like "Thank you" on empty audio.
+
 ## Troubleshooting
 
 ### Nothing happens when I press F11

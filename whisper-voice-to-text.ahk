@@ -73,6 +73,21 @@ StopRecording()
     try FileDelete(FIXED_FILE)
     shell.Run('ffmpeg -y -i "' . RECORDING_FILE . '" -c copy "' . FIXED_FILE . '"', 0, true)
 
+    ; Skip silent or very short recordings to avoid whisper hallucinations
+    statFile := A_Temp . "\whisper_stat.txt"
+    try FileDelete(statFile)
+    shell.Run(A_ComSpec . ' /c sox "' . FIXED_FILE . '" -n stat 2>"' . statFile . '"', 0, true)
+    try
+        statErr := FileRead(statFile)
+    catch
+        return
+    if RegExMatch(statErr, "Length \(seconds\):\s+([\d.]+)", &durMatch)
+        if (Float(durMatch[1]) < 1.0)
+            return
+    if RegExMatch(statErr, "RMS\s+amplitude:\s+([\d.]+)", &rmsMatch)
+        if (Float(rmsMatch[1]) < 0.01)
+            return
+
     ; Run whisper (hidden window, output to file to avoid stealing focus)
     ToolTip "Processing..."
     try FileDelete(WHISPER_OUT . ".txt")
