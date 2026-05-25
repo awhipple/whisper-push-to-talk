@@ -2,12 +2,13 @@
 
 Push-to-talk voice transcription on Windows. Hold a key, speak, release — your words get typed into whatever app has focus.
 
+- **F10** — hold to record, copies the transcribed text to clipboard (doesn't paste)
 - **F11** — hold to record, pastes the transcribed text
 - **F12** — same thing, but also presses Enter after pasting
 
 ## How It Works
 
-1. Hold **F11** or **F12** → Sox starts recording from your microphone
+1. Hold **F10**, **F11**, or **F12** → Sox starts recording from your microphone
 2. Release the key → Sox stops, ffmpeg fixes the WAV header, whisper.cpp transcribes the audio, and the text is pasted at your cursor
 
 ## Prerequisites
@@ -77,7 +78,7 @@ The script is included in this repo as `whisper-voice-to-text.ahk`. Open it and 
 
 ### Changing the Hotkey
 
-Replace the hotkey definitions (`F11`, `F12`, and their `Up` counterparts) with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
+Replace the hotkey definitions (`F10`, `F11`, `F12`, and their `Up` counterparts) with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
 
 ### Changing the Language
 
@@ -97,11 +98,11 @@ The script will now launch automatically every time you log in.
 
 1. Double-click `whisper-voice-to-text.ahk` to start the script (you'll see an "H" icon in your system tray)
 2. Click into any text field — a browser, editor, chat window, etc.
-3. Hold **F11** or **F12** and wait for the "Recording..." tooltip to appear
+3. Hold **F10**, **F11**, or **F12** and wait for the "Recording..." tooltip to appear
 4. Speak your text
-5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is pasted at your cursor (F12 also presses Enter)
+5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is copied to clipboard (F10), pasted at your cursor (F11), or pasted and Enter is pressed (F12)
 
-If you release the key too quickly (under 1 second) or the recording is silent, the script skips transcription entirely. This prevents whisper from hallucinating text like "Thank you" on empty audio.
+If you release the key too quickly (under 0.5 seconds) or the recording is silent, the script skips transcription entirely. This prevents whisper from hallucinating text like "Thank you" on empty audio.
 
 ## Troubleshooting
 
@@ -130,4 +131,4 @@ If you release the key too quickly (under 1 second) or the recording is silent, 
 - The script kills sox by process name (`taskkill /im sox.exe`), so don't run other sox processes while using it
 - Force-killing sox corrupts the WAV header, which is why ffmpeg is used as an intermediate fixup step
 - Whisper model load time is ~1-2 seconds on first transcription; the actual transcription is fast on a GPU
-- The text is pasted via clipboard (Ctrl+V), so whatever was on your clipboard will be overwritten
+- F11 and F12 paste via clipboard (Ctrl+V) but restore your previous clipboard contents afterward. F10 replaces your clipboard with the transcribed text.

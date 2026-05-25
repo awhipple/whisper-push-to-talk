@@ -16,21 +16,33 @@ global MIC_NAME := "default"
 
 global recording := false
 global autoSubmit := false
+global clipboardOnly := false
+
+F10::
+{
+    global autoSubmit, clipboardOnly
+    autoSubmit := false
+    clipboardOnly := true
+    StartRecording()
+}
 
 F11::
 {
-    global autoSubmit
+    global autoSubmit, clipboardOnly
     autoSubmit := false
+    clipboardOnly := false
     StartRecording()
 }
 
 F12::
 {
-    global autoSubmit
+    global autoSubmit, clipboardOnly
     autoSubmit := true
+    clipboardOnly := false
     StartRecording()
 }
 
+F10 Up::StopRecording()
 F11 Up::StopRecording()
 F12 Up::StopRecording()
 
@@ -82,10 +94,10 @@ StopRecording()
     catch
         return
     if RegExMatch(statErr, "Length \(seconds\):\s+([\d.]+)", &durMatch)
-        if (Float(durMatch[1]) < 1.0)
+        if (Float(durMatch[1]) < 0.5)
             return
-    if RegExMatch(statErr, "RMS\s+amplitude:\s+([\d.]+)", &rmsMatch)
-        if (Float(rmsMatch[1]) < 0.01)
+    if RegExMatch(statErr, "Maximum\s+amplitude:\s+([\d.]+)", &maxMatch)
+        if (Float(maxMatch[1]) < 0.005)
             return
 
     ; Run whisper (hidden window, output to file to avoid stealing focus)
@@ -101,15 +113,21 @@ StopRecording()
 
     text := RegExReplace(raw, "^\s+|\s+$", "")
     if (text != "") {
-        prevClip := ClipboardAll()
-        A_Clipboard := text
-        Sleep 100
-        Send("^v")
-        if autoSubmit {
-            Sleep 300
-            SendEvent("{Enter}")
+        if clipboardOnly {
+            A_Clipboard := text
+            ToolTip "Copied to clipboard"
+            SetTimer () => ToolTip(), -1500
+        } else {
+            prevClip := ClipboardAll()
+            A_Clipboard := text
+            Sleep 100
+            Send("^v")
+            if autoSubmit {
+                Sleep 300
+                SendEvent("{Enter}")
+            }
+            Sleep 100
+            A_Clipboard := prevClip
         }
-        Sleep 100
-        A_Clipboard := prevClip
     }
 }
