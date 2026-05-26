@@ -53,10 +53,29 @@ Download and install from https://www.autohotkey.com/. Make sure you install **v
    - Models are available from https://huggingface.co/ggerganov/whisper.cpp/tree/main
    - Smaller models (base, small, medium) are faster but less accurate
    - Place the model file alongside the exe (e.g., `C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin`)
+   - **If you pick a different model**, override `WHISPER_MODEL` in `config.local.ahk` to match its filename (see [Configuration](#configuration) below) — otherwise transcription will fail and whisper's error message will appear wherever your cursor is.
 
 ## Configuration
 
-### Find Your Microphone Name
+### Local overrides (`config.local.ahk`)
+
+The first time you launch `whisper-voice-to-text.ahk`, it auto-creates a `config.local.ahk` file next to it, pre-filled with every overridable setting at its default value. This file is **gitignored**, so any customizations you make stay local and won't conflict with future `git pull`s.
+
+Workflow:
+
+1. Double-click `whisper-voice-to-text.ahk` once — `config.local.ahk` appears in the same folder
+2. Open `config.local.ahk` and edit any value
+3. Reload the script (right-click the "H" tray icon → **Reload Script**, or just relaunch) so the new values take effect
+
+The settings exposed in `config.local.ahk`:
+
+- `WHISPER_EXE` — path to `whisper-cli.exe`
+- `WHISPER_MODEL` — path to your model file (change this if you used a different model than the recommended one)
+- `MIC_NAME` — your microphone name (see below for how to find it)
+
+If you don't need to change anything, you can ignore the file entirely — the defaults stay in effect.
+
+### Find your microphone name
 
 Run this in a terminal to list available audio devices:
 
@@ -70,19 +89,14 @@ Look for your microphone in the output. It will look something like:
 "Microphone (Realtek(R) Audio)" (audio)
 ```
 
-Copy the exact name and set it as the `MIC_NAME` value at the top of the script. If `"default"` works for you, no change is needed.
+Copy the exact name and set it as the `MIC_NAME` value in `config.local.ahk`. If `"default"` works for you, no change is needed.
 
-### The Script
+### Changing the hotkey or language
 
-The script is included in this repo as `whisper-voice-to-text.ahk`. Open it and update the config variables at the top to match your setup before running.
+These two settings live in the main script rather than `config.local.ahk` (changing them is structural enough that you'll merge any future updates by hand):
 
-### Changing the Hotkey
-
-Replace the hotkey definitions (`F10`, `F11`, `F12`, and their `Up` counterparts) with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
-
-### Changing the Language
-
-Replace `-l en` in the whisper command with your language code (e.g., `-l es` for Spanish, `-l fr` for French). Remove `-l en` entirely to let whisper auto-detect the language.
+- **Hotkey:** replace the hotkey definitions (`F10`, `F11`, `F12`, and their `Up` counterparts) in `whisper-voice-to-text.ahk` with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
+- **Language:** replace `-l en` in the whisper command with your language code (e.g., `-l es` for Spanish, `-l fr` for French). Remove `-l en` entirely to let whisper auto-detect the language.
 
 ## Run on Startup
 
@@ -100,13 +114,17 @@ The script will now launch automatically every time you log in.
 2. Click into any text field — a browser, editor, chat window, etc.
 3. Hold **F10**, **F11**, or **F12** and wait for the "Recording..." tooltip to appear
 4. Speak your text
-5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is copied to clipboard (F10), pasted at your cursor (F11), or pasted and Enter is pressed (F12)
+5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is pasted at your cursor (F12 also presses Enter afterward)
 
 If you release the key too quickly (under 0.5 seconds) or the recording is silent, the script skips transcription entirely. This prevents whisper from hallucinating text like "Thank you" on empty audio.
 
+**F10 (clipboard-only mode):** F10 records and transcribes the same way as F11, but copies the result to your clipboard instead of pasting it. Use this when you want to paste the text somewhere yourself rather than have it inserted at your current cursor.
+
+**First-run check:** for your first try, click into an empty text editor like Notepad. If something is misconfigured (wrong model path in `config.local.ahk`, missing binary, etc.), whisper's error message will be pasted instead of transcribed text — a quick way to find out what's wrong without needing a log.
+
 ## Troubleshooting
 
-### Nothing happens when I press F11
+### Nothing happens when I press the hotkey
 - Make sure AutoHotkey v2 is installed (not v1)
 - Right-click the script and choose "Run as administrator" if needed
 
@@ -124,7 +142,7 @@ If you release the key too quickly (under 0.5 seconds) or the recording is silen
 - Delete the temp file: `del %TEMP%\whisper_recording.wav`
 
 ### Beginning of speech gets cut off
-- This setup starts recording the moment you press F11, so there shouldn't be clipping. If it happens, increase the `Sleep 300` value in the F11 handler to give sox more startup time.
+- This setup starts recording the moment you press the hotkey, so there shouldn't be clipping. If it happens, increase the `Sleep 300` value in the hotkey handler to give sox more startup time.
 
 ## Notes
 

@@ -2,17 +2,31 @@
 #SingleInstance Force
 
 ; ============================================================
-; CONFIG — Update these paths to match your setup
+; DEFAULTS — to override, edit config.local.ahk (auto-created next to this script on first launch)
 ; ============================================================
 global WHISPER_EXE := "C:\tools\whisper\whisper-cli.exe"
 global WHISPER_MODEL := "C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin"
 global RECORDING_FILE := A_Temp . "\whisper_recording.wav"
 global FIXED_FILE := A_Temp . "\whisper_fixed.wav"
 global WHISPER_OUT := A_Temp . "\whisper_out"
-
-; If your mic name is different, update this:
 global MIC_NAME := "default"
 ; ============================================================
+
+; Pull in local overrides if present (gitignored, so `git pull` stays clean)
+#Include *i %A_ScriptDir%\config.local.ahk
+
+; Create the local config template on first launch so the user has something to edit
+configFile := A_ScriptDir . "\config.local.ahk"
+if !FileExist(configFile) {
+    FileAppend(
+        "; Local overrides for whisper-voice-to-text (not tracked in git).`r`n"
+        . "; Edit any value below and reload the script (right-click the tray icon -> Reload Script) for it to take effect.`r`n"
+        . "`r`n"
+        . "WHISPER_EXE := `"C:\tools\whisper\whisper-cli.exe`"`r`n"
+        . "WHISPER_MODEL := `"C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin`"`r`n"
+        . "MIC_NAME := `"default`"`r`n"
+    , configFile)
+}
 
 global recording := false
 global autoSubmit := false
@@ -102,27 +116,43 @@ StopRecording()
 
     ; Run whisper (hidden window, output to file to avoid stealing focus)
     ToolTip "Processing..."
+    errFile := A_Temp . "\whisper_err.txt"
     try FileDelete(WHISPER_OUT . ".txt")
-    shell.Run(WHISPER_EXE . ' -m ' . WHISPER_MODEL . ' -l en -nt -otxt -of "' . WHISPER_OUT . '" -f "' . FIXED_FILE . '"', 0, true)
+    try FileDelete(errFile)
+    shell.Run(A_ComSpec . ' /c ' . WHISPER_EXE . ' -m ' . WHISPER_MODEL . ' -l en -nt -otxt -of "' . WHISPER_OUT . '" -f "' . FIXED_FILE . '" 2>"' . errFile . '"', 0, true)
     ToolTip
 
-    try
+    text := ""
+    isError := false
+    try {
         raw := FileRead(WHISPER_OUT . ".txt")
-    catch
-        return
+        text := RegExReplace(raw, "^\s+|\s+$", "")
+    } catch {
+        text := ""
+    }
 
-    text := RegExReplace(raw, "^\s+|\s+$", "")
+    ; If whisper produced no transcription, surface its stderr so failures aren't silent
+    if (text = "") {
+        try {
+            rawErr := FileRead(errFile)
+            text := RegExReplace(rawErr, "^\s+|\s+$", "")
+            if (text != "")
+                isError := true
+        } catch {
+        }
+    }
+
     if (text != "") {
         if clipboardOnly {
             A_Clipboard := text
-            ToolTip "Copied to clipboard"
+            ToolTip(isError ? "Whisper error copied to clipboard" : "Copied to clipboard")
             SetTimer () => ToolTip(), -1500
         } else {
             prevClip := ClipboardAll()
             A_Clipboard := text
             Sleep 100
             Send("^v")
-            if autoSubmit {
+            if (autoSubmit && !isError) {
                 Sleep 300
                 SendEvent("{Enter}")
             }
