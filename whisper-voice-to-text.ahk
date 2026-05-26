@@ -31,38 +31,76 @@ if !FileExist(configFile) {
 global recording := false
 global autoSubmit := false
 global clipboardOnly := false
-
-F10::
-{
-    global autoSubmit, clipboardOnly
-    autoSubmit := false
-    clipboardOnly := true
-    StartRecording()
-}
+global toggleMode := false
+global recordStartTime := 0
+; Tap-vs-hold threshold; also doubles as the sox startup delay before the "Recording..." tooltip appears.
+; These two need to be the same value, otherwise a hold just over the tap window briefly flashes
+; the hold tooltip before being overwritten by the toggle tooltip.
+global TAP_THRESHOLD_MS := 200
 
 F11::
 {
-    global autoSubmit, clipboardOnly
+    global recording, toggleMode, recordStartTime, clipboardOnly, autoSubmit
+    if recording {
+        if toggleMode {
+            toggleMode := false
+            StopRecording()
+        }
+        return
+    }
+    clipboardOnly := true
     autoSubmit := false
-    clipboardOnly := false
+    recordStartTime := A_TickCount
     StartRecording()
+}
+
+F11 Up::
+{
+    global recording, toggleMode, recordStartTime
+    if !recording
+        return
+    if (A_TickCount - recordStartTime < TAP_THRESHOLD_MS) {
+        toggleMode := true
+        ToolTip "Recording (tap F11 to stop)..."
+        return
+    }
+    StopRecording()
 }
 
 F12::
 {
-    global autoSubmit, clipboardOnly
-    autoSubmit := true
+    global recording, toggleMode, recordStartTime, clipboardOnly, autoSubmit
+    if recording {
+        if toggleMode {
+            toggleMode := false
+            autoSubmit := false
+            StopRecording()
+        }
+        return
+    }
     clipboardOnly := false
+    autoSubmit := true
+    recordStartTime := A_TickCount
     StartRecording()
 }
 
-F10 Up::StopRecording()
-F11 Up::StopRecording()
-F12 Up::StopRecording()
+F12 Up::
+{
+    global recording, toggleMode, recordStartTime, autoSubmit
+    if !recording
+        return
+    if (A_TickCount - recordStartTime < TAP_THRESHOLD_MS) {
+        toggleMode := true
+        autoSubmit := false
+        ToolTip "Recording (tap F12 to stop)..."
+        return
+    }
+    StopRecording()
+}
 
 StartRecording()
 {
-    global recording, RECORDING_FILE, MIC_NAME
+    global recording, toggleMode, RECORDING_FILE, MIC_NAME, TAP_THRESHOLD_MS
     if recording
         return
     recording := true
@@ -70,8 +108,11 @@ StartRecording()
     try FileDelete(RECORDING_FILE)
 
     Run('sox -t waveaudio ' . MIC_NAME . ' -r 16000 -c 1 -b 16 "' . RECORDING_FILE . '"', , "Hide")
-    Sleep 300
-    ToolTip "Recording..."
+    Sleep TAP_THRESHOLD_MS
+    ; Skip the "Recording..." tooltip if a tap-to-toggle already set its own message,
+    ; or if recording was stopped during the Sleep above (e.g., two fast taps in a row)
+    if (recording && !toggleMode)
+        ToolTip "Recording..."
 }
 
 StopRecording()

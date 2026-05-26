@@ -1,15 +1,24 @@
 # Voice-to-Text with Whisper + AutoHotkey
 
-Push-to-talk voice transcription on Windows. Hold a key, speak, release — your words get typed into whatever app has focus.
+Push-to-talk voice transcription on Windows. Trigger a hotkey, speak, and your words land in whatever app has focus.
 
-- **F10** — hold to record, copies the transcribed text to clipboard (doesn't paste)
-- **F11** — hold to record, pastes the transcribed text
-- **F12** — same thing, but also presses Enter after pasting
+- **F11** — clipboard-only mode. Copies the transcription to your clipboard (doesn't paste)
+- **F12** — paste mode. Pastes the transcription at your cursor
+
+Both hotkeys support two interaction styles:
+
+- **Hold-to-talk:** press and hold the key while speaking, release when done (walkie-talkie style)
+- **Tap-to-toggle:** tap once to start a hands-free recording, tap again to stop
+
+For F12, the interaction style also controls the submit behavior:
+
+- **Hold F12** → paste **and press Enter** (great for chat boxes, prompts, etc.)
+- **Tap F12** → paste only (no Enter), so you can review before submitting
 
 ## How It Works
 
-1. Hold **F10**, **F11**, or **F12** → Sox starts recording from your microphone
-2. Release the key → Sox stops, ffmpeg fixes the WAV header, whisper.cpp transcribes the audio, and the text is pasted at your cursor
+1. Trigger **F11** or **F12** (hold or tap) → Sox starts recording from your microphone
+2. Stop recording (release the key, or tap the same key again) → Sox stops, ffmpeg fixes the WAV header, whisper.cpp transcribes the audio, and the text is delivered to your cursor or clipboard
 
 ## Prerequisites
 
@@ -95,7 +104,7 @@ Copy the exact name and set it as the `MIC_NAME` value in `config.local.ahk`. If
 
 These two settings live in the main script rather than `config.local.ahk` (changing them is structural enough that you'll merge any future updates by hand):
 
-- **Hotkey:** replace the hotkey definitions (`F10`, `F11`, `F12`, and their `Up` counterparts) in `whisper-voice-to-text.ahk` with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
+- **Hotkey:** replace the hotkey definitions (`F11`, `F12`, and their `Up` counterparts) in `whisper-voice-to-text.ahk` with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
 - **Language:** replace `-l en` in the whisper command with your language code (e.g., `-l es` for Spanish, `-l fr` for French). Remove `-l en` entirely to let whisper auto-detect the language.
 
 ## Run on Startup
@@ -112,13 +121,15 @@ The script will now launch automatically every time you log in.
 
 1. Double-click `whisper-voice-to-text.ahk` to start the script (you'll see an "H" icon in your system tray)
 2. Click into any text field — a browser, editor, chat window, etc.
-3. Hold **F10**, **F11**, or **F12** and wait for the "Recording..." tooltip to appear
-4. Speak your text
-5. Release the key — a "Processing..." tooltip appears while whisper transcribes, then the text is pasted at your cursor (F12 also presses Enter afterward)
+3. Start recording one of two ways:
+   - **Hold-to-talk:** press and hold **F11** or **F12** while you speak, then release
+   - **Tap-to-toggle:** tap **F11** or **F12** once to start a hands-free recording (the tooltip changes to "Recording (tap to stop)..."), then tap the same key again when you're done
+4. A "Processing..." tooltip appears while whisper transcribes, then the text is delivered:
+   - **F11** → copied to your clipboard
+   - **F12 (held)** → pasted at your cursor, then **Enter** is pressed
+   - **F12 (tapped)** → pasted at your cursor (no Enter — review before submitting)
 
-If you release the key too quickly (under 0.5 seconds) or the recording is silent, the script skips transcription entirely. This prevents whisper from hallucinating text like "Thank you" on empty audio.
-
-**F10 (clipboard-only mode):** F10 records and transcribes the same way as F11, but copies the result to your clipboard instead of pasting it. Use this when you want to paste the text somewhere yourself rather than have it inserted at your current cursor.
+If a recording is silent or shorter than 0.5 seconds, the script skips transcription entirely. This prevents whisper from hallucinating text like "Thank you" on empty audio, and also acts as a safety net for accidental key presses.
 
 **First-run check:** for your first try, click into an empty text editor like Notepad. If something is misconfigured (wrong model path in `config.local.ahk`, missing binary, etc.), whisper's error message will be pasted instead of transcribed text — a quick way to find out what's wrong without needing a log.
 
@@ -142,11 +153,11 @@ If you release the key too quickly (under 0.5 seconds) or the recording is silen
 - Delete the temp file: `del %TEMP%\whisper_recording.wav`
 
 ### Beginning of speech gets cut off
-- This setup starts recording the moment you press the hotkey, so there shouldn't be clipping. If it happens, increase the `Sleep 300` value in the hotkey handler to give sox more startup time.
+- This setup starts recording the moment you press the hotkey, so there shouldn't be clipping. If it happens, increase the `TAP_THRESHOLD_MS` value at the top of the script (it controls both the tap-vs-hold detection window and the sox startup delay before the "Recording..." tooltip appears).
 
 ## Notes
 
 - The script kills sox by process name (`taskkill /im sox.exe`), so don't run other sox processes while using it
 - Force-killing sox corrupts the WAV header, which is why ffmpeg is used as an intermediate fixup step
 - Whisper model load time is ~1-2 seconds on first transcription; the actual transcription is fast on a GPU
-- F11 and F12 paste via clipboard (Ctrl+V) but restore your previous clipboard contents afterward. F10 replaces your clipboard with the transcribed text.
+- F12 pastes via clipboard (Ctrl+V) but restores your previous clipboard contents afterward. F11 (clipboard-only mode) leaves the transcribed text on your clipboard.
