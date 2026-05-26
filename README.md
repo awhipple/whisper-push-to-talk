@@ -22,12 +22,48 @@ For F12, the interaction style also controls the submit behavior:
 
 ## Prerequisites
 
-- Windows 10/11
+- Windows 10/11 (with [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) — built into modern Windows; install "App Installer" from the Microsoft Store if missing)
 - A working microphone
-- [AutoHotkey v2](https://www.autohotkey.com/) (v2.0+, not v1)
 - An NVIDIA GPU is recommended for fast transcription (CPU works but is slower)
 
-## Installation
+## Quick install (recommended)
+
+1. [Download this repo as a zip](https://github.com/awhipple/whisper-push-to-talk/archive/refs/heads/master.zip) and extract it somewhere
+2. Double-click **`install.bat`** in the extracted folder
+
+The installer will:
+
+- Install AutoHotkey v2 and FFmpeg via winget
+- Download SOX, whisper.cpp (CUDA build if it detects an NVIDIA GPU, CPU build otherwise), and a ~800 MB transcription model
+- Drop everything in `%LOCALAPPDATA%\WhisperPushToTalk\` and generate a `config.local.ahk` with absolute paths
+- Register a scheduled task that auto-launches the script at every logon (faster than the Startup folder — see [Auto-launch at logon](#auto-launch-at-logon) below)
+- Launch the script and open `config.local.ahk` in Notepad so you can tweak the mic name if needed
+
+Look for the "H" icon in your system tray when it finishes. Hold or tap F11/F12 and you're up and running.
+
+**Re-running `install.bat` is safe** — it works as an updater. Already-installed binaries are detected and skipped, the script is refreshed in place, and your `config.local.ahk` is preserved so any edits (like a custom `MIC_NAME`) stick around.
+
+If anything fails, you can fall back to the manual steps below.
+
+## Uninstalling
+
+Run `uninstall.bat` from this repo. After a "press Y to confirm" prompt, it will:
+
+- Stop the running script (filtered to only our process — won't affect any other AHK scripts you have running)
+- Remove the `WhisperPushToTalk` scheduled task (frees F11/F12 permanently, not just until next logon)
+- Delete `%LOCALAPPDATA%\WhisperPushToTalk\` (the .ahk script, config, sox, whisper.cpp, and the ~800 MB model)
+
+**AutoHotkey and FFmpeg are deliberately left installed**, since they're common tools that other apps on your machine may rely on. If you're sure nothing else needs them, the uninstaller prints the exact `winget uninstall` commands to remove them yourself.
+
+**Just want F11/F12 back temporarily?** Right-click the "H" tray icon → **Exit**. The script stops immediately. (At next logon the scheduled task brings it back — to stop *that* too, run the full uninstaller.)
+
+**Lost the repo and need to clean up manually?**
+
+- Stop the script: right-click the "H" tray icon → Exit, or end `AutoHotkey64.exe` in Task Manager
+- Remove the scheduled task: open Task Scheduler (Win+R → `taskschd.msc`), find `WhisperPushToTalk`, delete it
+- Delete the folder: `%LOCALAPPDATA%\WhisperPushToTalk\`
+
+## Manual install
 
 ### 1. AutoHotkey v2
 
@@ -37,18 +73,15 @@ Download and install from https://www.autohotkey.com/. Make sure you install **v
 
 1. Download Sox for Windows from https://sourceforge.net/projects/sox/
 2. Run the installer or extract to a folder (e.g., `C:\tools\sox`)
-3. Add the Sox folder to your system PATH:
-   - Search "Environment Variables" in the Start menu
-   - Under System Variables, find `Path`, click Edit
-   - Add the Sox directory (e.g., `C:\tools\sox`)
-4. Verify: open a new terminal and run `sox --version`
+3. Either add the Sox folder to your system PATH, or set `SOX_EXE` in `config.local.ahk` to the full path of `sox.exe`
+4. Verify: `sox --version` (if on PATH) or that the exe runs from its install location
 
 ### 3. FFmpeg (WAV header repair)
 
 1. Download a Windows build from https://www.gyan.dev/ffmpeg/builds/ (get the "release essentials" zip)
 2. Extract to a folder (e.g., `C:\tools\ffmpeg`)
-3. Add the `bin` subfolder to your system PATH (e.g., `C:\tools\ffmpeg\bin`)
-4. Verify: open a new terminal and run `ffmpeg -version`
+3. Either add the `bin` subfolder to your system PATH, or set `FFMPEG_EXE` in `config.local.ahk` to the full path of `ffmpeg.exe`
+4. Verify: `ffmpeg -version` (if on PATH)
 
 ### 4. Whisper.cpp (speech-to-text)
 
@@ -68,21 +101,26 @@ Download and install from https://www.autohotkey.com/. Make sure you install **v
 
 ### Local overrides (`config.local.ahk`)
 
-The first time you launch `whisper-voice-to-text.ahk`, it auto-creates a `config.local.ahk` file next to it, pre-filled with every overridable setting at its default value. This file is **gitignored**, so any customizations you make stay local and won't conflict with future `git pull`s.
+All user-tunable settings live in a `config.local.ahk` file next to the script. This file is **gitignored**, so customizations stay local and won't conflict with future `git pull`s.
 
-Workflow:
+- **Quick install:** the installer generates this file for you with absolute paths to every binary it placed.
+- **Manual install:** the first time you launch the script, it auto-creates `config.local.ahk` pre-filled with default values you can edit.
 
-1. Double-click `whisper-voice-to-text.ahk` once — `config.local.ahk` appears in the same folder
-2. Open `config.local.ahk` and edit any value
-3. Reload the script (right-click the "H" tray icon → **Reload Script**, or just relaunch) so the new values take effect
+To edit and apply changes:
 
-The settings exposed in `config.local.ahk`:
+1. Find the **"H" icon** in your system tray (bottom-right of the taskbar; click the small up-arrow `^` to see hidden icons)
+2. Right-click the "H" icon → **Edit config** to open the file in Notepad
+3. Save your changes, then right-click → **Reload Script** so the new values take effect
+
+The tray menu also has an **Open install folder** shortcut if you ever need to poke around the install directory directly.
+
+The settings:
 
 - `WHISPER_EXE` — path to `whisper-cli.exe`
-- `WHISPER_MODEL` — path to your model file (change this if you used a different model than the recommended one)
+- `WHISPER_MODEL` — path to your model file (change this if you used a different model than the default)
+- `SOX_EXE` — path to `sox.exe` (or just `"sox"` if it's on your PATH)
+- `FFMPEG_EXE` — path to `ffmpeg.exe` (or just `"ffmpeg"` if it's on your PATH)
 - `MIC_NAME` — your microphone name (see below for how to find it)
-
-If you don't need to change anything, you can ignore the file entirely — the defaults stay in effect.
 
 ### Find your microphone name
 
@@ -107,19 +145,23 @@ These two settings live in the main script rather than `config.local.ahk` (chang
 - **Hotkey:** replace the hotkey definitions (`F11`, `F12`, and their `Up` counterparts) in `whisper-voice-to-text.ahk` with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
 - **Language:** replace `-l en` in the whisper command with your language code (e.g., `-l es` for Spanish, `-l fr` for French). Remove `-l en` entirely to let whisper auto-detect the language.
 
-## Run on Startup
+## Auto-launch at logon
 
-The script won't start automatically after a reboot unless you configure it to. The easiest way:
+**Quick install:** the installer registers a scheduled task called `WhisperPushToTalk` that fires on every logon. This runs noticeably faster than the Startup folder, which Windows throttles for several minutes after login to keep the UI responsive.
 
-1. Press **Win + R**, type `shell:startup`, and hit Enter — this opens your Startup folder
+To disable or modify it: open **Task Scheduler** (Win+R → `taskschd.msc`), find `WhisperPushToTalk` in the task library, and disable or delete it.
+
+**Manual install fallback** (if you skipped the installer): drop a shortcut to `whisper-voice-to-text.ahk` into your Startup folder.
+
+1. Press **Win + R**, type `shell:startup`, hit Enter
 2. Right-click `whisper-voice-to-text.ahk` → **Create shortcut**
 3. Move the shortcut into the Startup folder
 
-The script will now launch automatically every time you log in.
+The script will launch at every login, just with the usual Windows Startup-folder delay.
 
 ## Usage
 
-1. Double-click `whisper-voice-to-text.ahk` to start the script (you'll see an "H" icon in your system tray)
+1. Make sure the script is running — look for the **"H" icon** in your system tray. The installer launches it automatically and re-launches it at every logon. If you did a manual install, double-click `whisper-voice-to-text.ahk` to start it.
 2. Click into any text field — a browser, editor, chat window, etc.
 3. Start recording one of two ways:
    - **Hold-to-talk:** press and hold **F11** or **F12** while you speak, then release

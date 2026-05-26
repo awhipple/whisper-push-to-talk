@@ -6,6 +6,8 @@
 ; ============================================================
 global WHISPER_EXE := "C:\tools\whisper\whisper-cli.exe"
 global WHISPER_MODEL := "C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin"
+global SOX_EXE := "sox"
+global FFMPEG_EXE := "ffmpeg"
 global RECORDING_FILE := A_Temp . "\whisper_recording.wav"
 global FIXED_FILE := A_Temp . "\whisper_fixed.wav"
 global WHISPER_OUT := A_Temp . "\whisper_out"
@@ -19,11 +21,22 @@ global MIC_NAME := "default"
 configFile := A_ScriptDir . "\config.local.ahk"
 if !FileExist(configFile) {
     FileAppend(
-        "; Local overrides for whisper-voice-to-text (not tracked in git).`r`n"
-        . "; Edit any value below and reload the script (right-click the tray icon -> Reload Script) for it to take effect.`r`n"
+        "; ============================================================`r`n"
+        . "; Local config for whisper-voice-to-text -- NOT tracked in git`r`n"
+        . "; ============================================================`r`n"
+        . ";`r`n"
+        . "; Edit any value below and save this file. To apply your changes:`r`n"
+        . ";   1. Find the `"H`" icon in your system tray (bottom-right of the`r`n"
+        . ";      taskbar; click the small up-arrow ^ to see hidden icons)`r`n"
+        . ";   2. Right-click the `"H`" icon and choose `"Reload Script`"`r`n"
+        . ";`r`n"
+        . "; If you can't find the `"H`" icon, the script may not be running.`r`n"
+        . "; Sign out and back in, or re-run the installer, to relaunch it.`r`n"
         . "`r`n"
         . "WHISPER_EXE := `"C:\tools\whisper\whisper-cli.exe`"`r`n"
         . "WHISPER_MODEL := `"C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin`"`r`n"
+        . "SOX_EXE := `"sox`"`r`n"
+        . "FFMPEG_EXE := `"ffmpeg`"`r`n"
         . "MIC_NAME := `"default`"`r`n"
     , configFile)
 }
@@ -37,6 +50,19 @@ global recordStartTime := 0
 ; These two need to be the same value, otherwise a hold just over the tap window briefly flashes
 ; the hold tooltip before being overwritten by the toggle tooltip.
 global TAP_THRESHOLD_MS := 200
+
+; Tray menu shortcuts so users have a one-click path to their config
+A_TrayMenu.Add()
+A_TrayMenu.Add("Edit config", (*) => Run('notepad.exe "' . A_ScriptDir . '\config.local.ahk"'))
+A_TrayMenu.Add("Open install folder", (*) => Run('explorer.exe "' . A_ScriptDir . '"'))
+
+; Warm up whisper in the background a few seconds after startup. Without this,
+; the very first transcription after boot pays the full cold-start cost (model
+; load into VRAM, CUDA init, OS page-cache miss on the ~800 MB model file),
+; which the user experiences as a 15-30s "stuck on Processing..." on their
+; first F11/F12 press. Running it now means that cost is paid while they're
+; still settling in at their desk, not when they're trying to use the feature.
+SetTimer WarmupWhisper, -5000
 
 F11::
 {
@@ -100,14 +126,14 @@ F12 Up::
 
 StartRecording()
 {
-    global recording, toggleMode, RECORDING_FILE, MIC_NAME, TAP_THRESHOLD_MS
+    global recording, toggleMode, RECORDING_FILE, MIC_NAME, SOX_EXE, TAP_THRESHOLD_MS
     if recording
         return
     recording := true
 
     try FileDelete(RECORDING_FILE)
 
-    Run('sox -t waveaudio ' . MIC_NAME . ' -r 16000 -c 1 -b 16 "' . RECORDING_FILE . '"', , "Hide")
+    Run('"' . SOX_EXE . '" -t waveaudio "' . MIC_NAME . '" -r 16000 -c 1 -b 16 "' . RECORDING_FILE . '"', , "Hide")
     Sleep TAP_THRESHOLD_MS
     ; Skip the "Recording..." tooltip if a tap-to-toggle already set its own message,
     ; or if recording was stopped during the Sleep above (e.g., two fast taps in a row)
@@ -117,7 +143,7 @@ StartRecording()
 
 StopRecording()
 {
-    global recording, autoSubmit, RECORDING_FILE, FIXED_FILE, WHISPER_EXE, WHISPER_MODEL
+    global recording, autoSubmit, RECORDING_FILE, FIXED_FILE, WHISPER_EXE, WHISPER_MODEL, SOX_EXE, FFMPEG_EXE
     if !recording
         return
     recording := false
@@ -138,12 +164,13 @@ StopRecording()
 
     ; Fix WAV header with ffmpeg (sox header is corrupted by force kill)
     try FileDelete(FIXED_FILE)
-    shell.Run('ffmpeg -y -i "' . RECORDING_FILE . '" -c copy "' . FIXED_FILE . '"', 0, true)
+    shell.Run('"' . FFMPEG_EXE . '" -y -i "' . RECORDING_FILE . '" -c copy "' . FIXED_FILE . '"', 0, true)
 
     ; Skip silent or very short recordings to avoid whisper hallucinations
     statFile := A_Temp . "\whisper_stat.txt"
     try FileDelete(statFile)
-    shell.Run(A_ComSpec . ' /c sox "' . FIXED_FILE . '" -n stat 2>"' . statFile . '"', 0, true)
+    statCmd := '"' . SOX_EXE . '" "' . FIXED_FILE . '" -n stat 2>"' . statFile . '"'
+    shell.Run(A_ComSpec . ' /c "' . statCmd . '"', 0, true)
     try
         statErr := FileRead(statFile)
     catch
@@ -160,7 +187,8 @@ StopRecording()
     errFile := A_Temp . "\whisper_err.txt"
     try FileDelete(WHISPER_OUT . ".txt")
     try FileDelete(errFile)
-    shell.Run(A_ComSpec . ' /c ' . WHISPER_EXE . ' -m ' . WHISPER_MODEL . ' -l en -nt -otxt -of "' . WHISPER_OUT . '" -f "' . FIXED_FILE . '" 2>"' . errFile . '"', 0, true)
+    whisperCmd := '"' . WHISPER_EXE . '" -m "' . WHISPER_MODEL . '" -l en -nt -otxt -of "' . WHISPER_OUT . '" -f "' . FIXED_FILE . '" 2>"' . errFile . '"'
+    shell.Run(A_ComSpec . ' /c "' . whisperCmd . '"', 0, true)
     ToolTip
 
     text := ""
@@ -201,4 +229,26 @@ StopRecording()
             A_Clipboard := prevClip
         }
     }
+}
+
+WarmupWhisper()
+{
+    ; Best-effort: generate a 1-second silent WAV and run whisper-cli against it
+    ; so the model gets loaded into VRAM and CUDA state is initialized. Any
+    ; failure here is silent — the user-visible behavior is just "first
+    ; transcription was slow", which is the status quo we're trying to improve.
+    global FFMPEG_EXE, WHISPER_EXE, WHISPER_MODEL
+    warmWav := A_Temp . "\whisper_warmup.wav"
+    warmOut := A_Temp . "\whisper_warmup_out"
+    try FileDelete(warmWav)
+    try FileDelete(warmOut . ".txt")
+    shell := ComObject("WScript.Shell")
+    genCmd := '"' . FFMPEG_EXE . '" -y -f lavfi -i anullsrc=r=16000:cl=mono -t 1 -c:a pcm_s16le "' . warmWav . '"'
+    shell.Run(A_ComSpec . ' /c "' . genCmd . '"', 0, true)
+    if !FileExist(warmWav)
+        return
+    whisperCmd := '"' . WHISPER_EXE . '" -m "' . WHISPER_MODEL . '" -l en -nt -otxt -of "' . warmOut . '" -f "' . warmWav . '"'
+    shell.Run(A_ComSpec . ' /c "' . whisperCmd . '"', 0, true)
+    try FileDelete(warmWav)
+    try FileDelete(warmOut . ".txt")
 }
