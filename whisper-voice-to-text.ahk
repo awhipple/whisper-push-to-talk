@@ -217,6 +217,7 @@ StopRecording()
         ; Whisper returns each segment on its own line; collapse into a single
         ; line so the pasted text reads naturally as a continuous paragraph.
         text := RegExReplace(raw, "\R+", " ")
+        text := RegExReplace(text, " {2,}", " ")
         text := RegExReplace(text, "^\s+|\s+$", "")
     } catch {
         text := ""
