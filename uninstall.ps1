@@ -46,6 +46,10 @@ try {
     Warn "Couldn't enumerate processes: $($_.Exception.Message)"
 }
 if (-not $found) { Info "No running script process found" }
+try {
+    Stop-Process -Name "whisper-server" -Force -ErrorAction SilentlyContinue
+    OK "Stopped whisper-server"
+} catch {}
 
 # ----- Remove the scheduled task -----
 Step "Removing scheduled task '$TaskName'"

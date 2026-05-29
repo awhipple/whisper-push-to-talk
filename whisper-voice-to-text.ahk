@@ -1,17 +1,19 @@
-#Requires AutoHotkey v2.0
+﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
 
 ; ============================================================
 ; DEFAULTS — to override, edit config.local.ahk (auto-created next to this script on first launch)
 ; ============================================================
-global WHISPER_EXE := "C:\tools\whisper\whisper-cli.exe"
+global WHISPER_EXE := "C:\tools\whisper\whisper-server.exe"
 global WHISPER_MODEL := "C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin"
+global WHISPER_PORT := "8178"
 global SOX_EXE := "sox"
 global FFMPEG_EXE := "ffmpeg"
 global RECORDING_FILE := A_Temp . "\whisper_recording.wav"
 global FIXED_FILE := A_Temp . "\whisper_fixed.wav"
-global WHISPER_OUT := A_Temp . "\whisper_out"
 global MIC_NAME := "default"
+global HOTKEY_CLIPBOARD := "F11"
+global HOTKEY_PASTE := "F12"
 ; ============================================================
 
 ; Pull in local overrides if present (gitignored, so `git pull` stays clean)
@@ -33,11 +35,14 @@ if !FileExist(configFile) {
         . "; If you can't find the `"H`" icon, the script may not be running.`r`n"
         . "; Sign out and back in, or re-run the installer, to relaunch it.`r`n"
         . "`r`n"
-        . "WHISPER_EXE := `"C:\tools\whisper\whisper-cli.exe`"`r`n"
+        . "WHISPER_EXE := `"C:\tools\whisper\whisper-server.exe`"`r`n"
         . "WHISPER_MODEL := `"C:\tools\whisper\models\ggml-large-v3-turbo-q8_0.bin`"`r`n"
+        . "WHISPER_PORT := `"8178`"`r`n"
         . "SOX_EXE := `"sox`"`r`n"
         . "FFMPEG_EXE := `"ffmpeg`"`r`n"
         . "MIC_NAME := `"default`"`r`n"
+        . "HOTKEY_CLIPBOARD := `"F11`"`r`n"
+        . "HOTKEY_PASTE := `"F12`"`r`n"
     , configFile)
 }
 
@@ -51,20 +56,24 @@ global recordStartTime := 0
 ; the hold tooltip before being overwritten by the toggle tooltip.
 global TAP_THRESHOLD_MS := 200
 
+global gServerPID := 0
+
 ; Tray menu shortcuts so users have a one-click path to their config
 A_TrayMenu.Add()
 A_TrayMenu.Add("Edit config", (*) => Run('notepad.exe "' . A_ScriptDir . '\config.local.ahk"'))
 A_TrayMenu.Add("Open install folder", (*) => Run('explorer.exe "' . A_ScriptDir . '"'))
 
-; Warm up whisper in the background a few seconds after startup. Without this,
-; the very first transcription after boot pays the full cold-start cost (model
-; load into VRAM, CUDA init, OS page-cache miss on the ~800 MB model file),
-; which the user experiences as a 15-30s "stuck on Processing..." on their
-; first F11/F12 press. Running it now means that cost is paid while they're
-; still settling in at their desk, not when they're trying to use the feature.
-SetTimer WarmupWhisper, -5000
+; Clean up the whisper server when the script exits or reloads
+OnExit(StopWhisperServer)
 
-F11::
+; Launch whisper-server in the background so the model stays loaded in VRAM.
+; The server accepts HTTP requests for transcription, eliminating the ~18s
+; model-load penalty that whisper-cli pays on every invocation.
+StartWhisperServer()
+
+; --- Hotkey handlers (bound dynamically so the keys are configurable) --------
+
+OnClipboardDown(*)
 {
     global recording, toggleMode, recordStartTime, clipboardOnly, autoSubmit
     if recording {
@@ -80,20 +89,20 @@ F11::
     StartRecording()
 }
 
-F11 Up::
+OnClipboardUp(*)
 {
-    global recording, toggleMode, recordStartTime
+    global recording, toggleMode, recordStartTime, HOTKEY_CLIPBOARD
     if !recording
         return
     if (A_TickCount - recordStartTime < TAP_THRESHOLD_MS) {
         toggleMode := true
-        ToolTip "Recording (tap F11 to stop)..."
+        ToolTip "Recording (tap " . HOTKEY_CLIPBOARD . " to stop)..."
         return
     }
     StopRecording()
 }
 
-F12::
+OnPasteDown(*)
 {
     global recording, toggleMode, recordStartTime, clipboardOnly, autoSubmit
     if recording {
@@ -110,19 +119,24 @@ F12::
     StartRecording()
 }
 
-F12 Up::
+OnPasteUp(*)
 {
-    global recording, toggleMode, recordStartTime, autoSubmit
+    global recording, toggleMode, recordStartTime, autoSubmit, HOTKEY_PASTE
     if !recording
         return
     if (A_TickCount - recordStartTime < TAP_THRESHOLD_MS) {
         toggleMode := true
         autoSubmit := false
-        ToolTip "Recording (tap F12 to stop)..."
+        ToolTip "Recording (tap " . HOTKEY_PASTE . " to stop)..."
         return
     }
     StopRecording()
 }
+
+Hotkey HOTKEY_CLIPBOARD, OnClipboardDown
+Hotkey HOTKEY_CLIPBOARD . " Up", OnClipboardUp
+Hotkey HOTKEY_PASTE, OnPasteDown
+Hotkey HOTKEY_PASTE . " Up", OnPasteUp
 
 StartRecording()
 {
@@ -143,7 +157,7 @@ StartRecording()
 
 StopRecording()
 {
-    global recording, autoSubmit, RECORDING_FILE, FIXED_FILE, WHISPER_EXE, WHISPER_MODEL, SOX_EXE, FFMPEG_EXE
+    global recording, autoSubmit, RECORDING_FILE, FIXED_FILE, WHISPER_PORT, SOX_EXE, FFMPEG_EXE
     if !recording
         return
     recording := false
@@ -182,25 +196,30 @@ StopRecording()
         if (Float(maxMatch[1]) < 0.005)
             return
 
-    ; Run whisper (hidden window, output to file to avoid stealing focus)
+    ; Transcribe via whisper-server HTTP API
     ToolTip "Processing..."
+    if (!EnsureServerRunning()) {
+        ToolTip
+        return
+    }
+    outFile := A_Temp . "\whisper_response.txt"
     errFile := A_Temp . "\whisper_err.txt"
-    try FileDelete(WHISPER_OUT . ".txt")
+    try FileDelete(outFile)
     try FileDelete(errFile)
-    whisperCmd := '"' . WHISPER_EXE . '" -m "' . WHISPER_MODEL . '" -l en -nt -otxt -of "' . WHISPER_OUT . '" -f "' . FIXED_FILE . '" 2>"' . errFile . '"'
-    shell.Run(A_ComSpec . ' /c "' . whisperCmd . '"', 0, true)
+    curlCmd := 'curl.exe -s --max-time 30 -X POST "http://127.0.0.1:' . WHISPER_PORT . '/inference" -F "file=@' . FIXED_FILE . '" -F "response_format=text" >"' . outFile . '" 2>"' . errFile . '"'
+    shell.Run(A_ComSpec . ' /c "' . curlCmd . '"', 0, true)
     ToolTip
 
     text := ""
     isError := false
     try {
-        raw := FileRead(WHISPER_OUT . ".txt")
+        raw := FileRead(outFile)
         text := RegExReplace(raw, "^\s+|\s+$", "")
     } catch {
         text := ""
     }
 
-    ; If whisper produced no transcription, surface its stderr so failures aren't silent
+    ; If transcription is empty, surface the error so failures aren't silent
     if (text = "") {
         try {
             rawErr := FileRead(errFile)
@@ -231,24 +250,47 @@ StopRecording()
     }
 }
 
-WarmupWhisper()
+StartWhisperServer()
 {
-    ; Best-effort: generate a 1-second silent WAV and run whisper-cli against it
-    ; so the model gets loaded into VRAM and CUDA state is initialized. Any
-    ; failure here is silent — the user-visible behavior is just "first
-    ; transcription was slow", which is the status quo we're trying to improve.
-    global FFMPEG_EXE, WHISPER_EXE, WHISPER_MODEL
-    warmWav := A_Temp . "\whisper_warmup.wav"
-    warmOut := A_Temp . "\whisper_warmup_out"
-    try FileDelete(warmWav)
-    try FileDelete(warmOut . ".txt")
-    shell := ComObject("WScript.Shell")
-    genCmd := '"' . FFMPEG_EXE . '" -y -f lavfi -i anullsrc=r=16000:cl=mono -t 1 -c:a pcm_s16le "' . warmWav . '"'
-    shell.Run(A_ComSpec . ' /c "' . genCmd . '"', 0, true)
-    if !FileExist(warmWav)
-        return
-    whisperCmd := '"' . WHISPER_EXE . '" -m "' . WHISPER_MODEL . '" -l en -nt -otxt -of "' . warmOut . '" -f "' . warmWav . '"'
-    shell.Run(A_ComSpec . ' /c "' . whisperCmd . '"', 0, true)
-    try FileDelete(warmWav)
-    try FileDelete(warmOut . ".txt")
+    global WHISPER_EXE, WHISPER_MODEL, WHISPER_PORT, gServerPID
+    if (gServerPID && ProcessExist(gServerPID))
+        ProcessClose(gServerPID)
+    Run('"' . WHISPER_EXE . '" -m "' . WHISPER_MODEL . '" -l en --host 127.0.0.1 --port ' . WHISPER_PORT, , "Hide", &pid)
+    gServerPID := pid
+}
+
+WaitForServer(timeout_ms := 30000)
+{
+    global WHISPER_PORT
+    start := A_TickCount
+    loop {
+        try {
+            whr := ComObject("WinHttp.WinHttpRequest.5.1")
+            whr.Open("GET", "http://127.0.0.1:" . WHISPER_PORT . "/", false)
+            whr.Send()
+            if (whr.Status = 200)
+                return true
+        } catch {
+        }
+        if (A_TickCount - start > timeout_ms)
+            return false
+        Sleep 250
+    }
+}
+
+EnsureServerRunning()
+{
+    global gServerPID
+    if (!gServerPID || !ProcessExist(gServerPID))
+        StartWhisperServer()
+    return WaitForServer()
+}
+
+StopWhisperServer(*)
+{
+    global gServerPID
+    if (gServerPID) {
+        ProcessClose(gServerPID)
+        gServerPID := 0
+    }
 }

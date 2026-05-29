@@ -234,16 +234,16 @@ if ($gpu) {
     Info "No NVIDIA GPU detected - using CPU build"
 }
 
-function Find-WhisperCli {
+function Find-WhisperServer {
     if (-not (Test-Path $WhisperDir)) { return $null }
-    $f = Get-ChildItem $WhisperDir -Filter "whisper-cli.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    $f = Get-ChildItem $WhisperDir -Filter "whisper-server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($f) { return $f.FullName }
     return $null
 }
 
-$WhisperCli = Find-WhisperCli
-if ($WhisperCli) {
-    Step "whisper.cpp already at $WhisperCli, skipping"
+$WhisperServer = Find-WhisperServer
+if ($WhisperServer) {
+    Step "whisper.cpp already at $WhisperServer, skipping"
 } else {
     Step "Looking up latest whisper.cpp release"
     try {
@@ -280,14 +280,14 @@ if ($WhisperCli) {
     Remove-Item $whisperZip -ErrorAction SilentlyContinue
 
     # The release zip's internal layout has changed across versions (sometimes at the root,
-    # sometimes under a Release/ subfolder), so locate whisper-cli.exe dynamically.
-    $WhisperCli = Find-WhisperCli
-    if (-not $WhisperCli) {
-        Warn "whisper-cli.exe not found anywhere under $WhisperDir after extraction. Contents:"
+    # sometimes under a Release/ subfolder), so locate whisper-server.exe dynamically.
+    $WhisperServer = Find-WhisperServer
+    if (-not $WhisperServer) {
+        Warn "whisper-server.exe not found anywhere under $WhisperDir after extraction. Contents:"
         Get-ChildItem $WhisperDir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $($_.FullName)" }
-        Fail "whisper-cli.exe missing from the extracted archive."
+        Fail "whisper-server.exe missing from the extracted archive."
     }
-    OK "whisper.cpp $($release.tag_name) at $WhisperCli"
+    OK "whisper.cpp $($release.tag_name) at $WhisperServer"
 }
 
 # ============================================================
@@ -327,6 +327,10 @@ try {
         Info "Stopped existing AutoHotkey process $($p.ProcessId) so the script can be overwritten"
     }
 } catch {}
+# Also stop any whisper-server left behind by the previous script session
+try {
+    Stop-Process -Name "whisper-server" -Force -ErrorAction SilentlyContinue
+} catch {}
 Copy-Item $RepoScript $AhkScript -Force
 OK "Script at $AhkScript"
 
@@ -335,7 +339,23 @@ OK "Script at $AhkScript"
 # ============================================================
 Step "Generating config.local.ahk"
 if (Test-Path $ConfigFile) {
-    OK "Config already exists at $ConfigFile - leaving it alone (preserves any edits)"
+    OK "Config already exists at $ConfigFile - preserving your edits"
+    $content = Get-Content $ConfigFile -Raw
+
+    # Migrate WHISPER_EXE from whisper-cli to whisper-server if still pointing to old binary
+    if ($content -match 'whisper-cli\.exe') {
+        $content = $content -replace 'whisper-cli\.exe', 'whisper-server.exe'
+        $content | Out-File -FilePath $ConfigFile -Encoding utf8 -Force
+        OK "Updated WHISPER_EXE from whisper-cli.exe to whisper-server.exe"
+    }
+
+    # Add WHISPER_PORT if missing (new setting for server-based transcription)
+    if ($content -notmatch 'WHISPER_PORT') {
+        $addition = "`r`n; --- Added by installer update ---`r`nWHISPER_PORT := `"8178`""
+        Add-Content -Path $ConfigFile -Value $addition
+        OK "Added WHISPER_PORT setting to existing config"
+    }
+
     Info "Delete the file and re-run the installer if you want fresh defaults."
 } else {
     # AHK does not escape backslashes in string literals; write paths verbatim.
@@ -352,11 +372,18 @@ if (Test-Path $ConfigFile) {
 ; If you can't find the "H" icon, the script may not be running.
 ; Sign out and back in, or re-run the installer, to relaunch it.
 
-WHISPER_EXE := "$WhisperCli"
+WHISPER_EXE := "$WhisperServer"
 WHISPER_MODEL := "$ModelFile"
+WHISPER_PORT := "8178"
 SOX_EXE := "$SoxExe"
 FFMPEG_EXE := "$FfmpegExe"
 MIC_NAME := "default"
+
+; Hotkeys - use any single key name from the AHK v2 key list:
+; https://www.autohotkey.com/docs/v2/KeyList.htm
+; Only function keys (F1-F24) are supported.
+HOTKEY_CLIPBOARD := "F11"   ; clipboard-only mode
+HOTKEY_PASTE := "F12"       ; paste mode
 "@
     $configContent | Out-File -FilePath $ConfigFile -Encoding utf8 -Force
     OK "Config at $ConfigFile"
@@ -386,8 +413,8 @@ Write-Host ""
 Write-Host "Installation complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "Quick usage:"
-Write-Host "  F11  hold or tap to record, copies to your clipboard"
-Write-Host "  F12  hold for paste + Enter, tap for paste-only (hands-free mode)"
+Write-Host "  F11  hold or tap to record, copies to your clipboard (configurable)"
+Write-Host "  F12  hold for paste + Enter, tap for paste-only (configurable)"
 Write-Host ""
 Write-Host "If you ever need to change the mic name or other settings, edit:"
 Write-Host "  $ConfigFile"

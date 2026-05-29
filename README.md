@@ -18,7 +18,9 @@ For F12, the interaction style also controls the submit behavior:
 ## How It Works
 
 1. Trigger **F11** or **F12** (hold or tap) → Sox starts recording from your microphone
-2. Stop recording (release the key, or tap the same key again) → Sox stops, ffmpeg fixes the WAV header, whisper.cpp transcribes the audio, and the text is delivered to your cursor or clipboard
+2. Stop recording (release the key, or tap the same key again) → Sox stops, ffmpeg fixes the WAV header, the audio is sent to a local whisper.cpp server for transcription, and the text is delivered to your cursor or clipboard
+
+A persistent `whisper-server` process runs in the background with the model loaded in VRAM, so transcriptions complete in ~1-2 seconds instead of the ~18 seconds that reloading the model every time would take.
 
 ## Prerequisites
 
@@ -91,6 +93,7 @@ Download and install from https://www.autohotkey.com/. Make sure you install **v
    - **CPU only (no NVIDIA GPU):** Download `whisper-bin-x64.zip` for a basic 64-bit build, or `whisper-blas-bin-x64.zip` for a CPU-optimized build using OpenBLAS
    - **32-bit Windows:** Use the `Win32` variants instead (`whisper-bin-Win32.zip` or `whisper-blas-bin-Win32.zip`)
 2. Extract the zip and place the contents somewhere (e.g., `C:\tools\whisper\`)
+   - The script uses `whisper-server.exe` (not `whisper-cli.exe`) to keep the model loaded in VRAM between transcriptions
 3. Download a model file — recommended: `ggml-large-v3-turbo-q8_0.bin`
    - Models are available from https://huggingface.co/ggerganov/whisper.cpp/tree/main
    - Smaller models (base, small, medium) are faster but less accurate
@@ -116,11 +119,16 @@ The tray menu also has an **Open install folder** shortcut if you ever need to p
 
 The settings:
 
-- `WHISPER_EXE` — path to `whisper-cli.exe`
+- `WHISPER_EXE` — path to `whisper-server.exe`
 - `WHISPER_MODEL` — path to your model file (change this if you used a different model than the default)
+- `WHISPER_PORT` — port for the local whisper server (default: `"8178"`)
 - `SOX_EXE` — path to `sox.exe` (or just `"sox"` if it's on your PATH)
 - `FFMPEG_EXE` — path to `ffmpeg.exe` (or just `"ffmpeg"` if it's on your PATH)
 - `MIC_NAME` — your microphone name (see below for how to find it)
+- `HOTKEY_CLIPBOARD` — key for clipboard-only mode (default: `"F11"`)
+- `HOTKEY_PASTE` — key for paste mode (default: `"F12"`)
+
+Only function keys (F1–F24) are supported. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for valid names.
 
 ### Find your microphone name
 
@@ -138,11 +146,10 @@ Look for your microphone in the output. It will look something like:
 
 Copy the exact name and set it as the `MIC_NAME` value in `config.local.ahk`. If `"default"` works for you, no change is needed.
 
-### Changing the hotkey or language
+### Changing the language
 
-These two settings live in the main script rather than `config.local.ahk` (changing them is structural enough that you'll merge any future updates by hand):
+This setting lives in the main script rather than `config.local.ahk` (changing it is structural enough that you'll merge any future updates by hand):
 
-- **Hotkey:** replace the hotkey definitions (`F11`, `F12`, and their `Up` counterparts) in `whisper-voice-to-text.ahk` with any keys you prefer. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for options.
 - **Language:** replace `-l en` in the whisper command with your language code (e.g., `-l es` for Spanish, `-l fr` for French). Remove `-l en` entirely to let whisper auto-detect the language.
 
 ## Auto-launch at logon
@@ -201,5 +208,6 @@ If a recording is silent or shorter than 0.5 seconds, the script skips transcrip
 
 - The script kills sox by process name (`taskkill /im sox.exe`), so don't run other sox processes while using it
 - Force-killing sox corrupts the WAV header, which is why ffmpeg is used as an intermediate fixup step
-- Whisper model load time is ~1-2 seconds on first transcription; the actual transcription is fast on a GPU
+- A `whisper-server` process runs in the background with the model loaded in VRAM (~900 MB GPU memory). It starts automatically with the script and is cleaned up on exit
+- The first transcription after launch may take a few extra seconds while the server finishes loading the model; subsequent transcriptions are near-instant on a GPU
 - F12 pastes via clipboard (Ctrl+V) but restores your previous clipboard contents afterward. F11 (clipboard-only mode) leaves the transcribed text on your clipboard.
