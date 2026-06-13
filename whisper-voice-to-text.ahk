@@ -220,6 +220,10 @@ StopRecording()
         text := RegExReplace(text, " {2,}", " ")
         text := RegExReplace(text, " ([.,!?;:])", "$1")
         text := RegExReplace(text, "^\s+|\s+$", "")
+        ; Whisper often lowercases sentence-initial discourse markers ("man,",
+        ; "so,", "yeah,"), so force the first character to uppercase.
+        if (text != "")
+            text := StrUpper(SubStr(text, 1, 1)) . SubStr(text, 2)
     } catch {
         text := ""
     }
