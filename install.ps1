@@ -356,6 +356,24 @@ if (Test-Path $ConfigFile) {
         OK "Added WHISPER_PORT setting to existing config"
     }
 
+    # Add or repair FFMPEG_EXE. Older configs predate the ffmpeg dependency
+    # (script default "ffmpeg" then fails off-PATH), and winget upgrades move
+    # the versioned Gyan.FFmpeg package folder, stranding a recorded path.
+    $content = Get-Content $ConfigFile -Raw   # re-read: blocks above may have appended
+    $ffmpegLine = "FFMPEG_EXE := `"$FfmpegExe`""
+    if ($content -notmatch 'FFMPEG_EXE') {
+        Add-Content -Path $ConfigFile -Value "`r`n; --- Added by installer update ---`r`n$ffmpegLine"
+        OK "Added FFMPEG_EXE setting to existing config"
+    } elseif ($content -match '(?m)^\s*FFMPEG_EXE\s*:=\s*"([^"]*)"') {
+        $current = $Matches[1]
+        $resolves = $current -and ((Test-Path $current) -or (Get-Command $current -ErrorAction SilentlyContinue))
+        if (-not $resolves) {
+            $content = $content -replace '(?m)^\s*FFMPEG_EXE\s*:=\s*"[^"]*"', $ffmpegLine.Replace('$', '$$')
+            $content | Out-File -FilePath $ConfigFile -Encoding utf8 -Force
+            OK "Repaired broken FFMPEG_EXE path -> $FfmpegExe"
+        }
+    }
+
     Info "Delete the file and re-run the installer if you want fresh defaults."
 } else {
     # AHK does not escape backslashes in string literals; write paths verbatim.
