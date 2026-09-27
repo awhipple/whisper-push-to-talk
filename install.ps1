@@ -415,7 +415,8 @@ $taskName = "WhisperPushToTalk"
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 $action    = New-ScheduledTaskAction    -Execute $AhkExe -Argument "`"$AhkScript`""
 $trigger   = New-ScheduledTaskTrigger   -AtLogOn -User $env:USERNAME
-$settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+# ExecutionTimeLimit defaults to 72h, after which Task Scheduler kills the tray script
+$settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 OK "Task registered -will launch on every logon"
