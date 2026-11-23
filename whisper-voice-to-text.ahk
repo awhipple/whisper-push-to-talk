@@ -265,28 +265,26 @@ StopRecording()
             SetTimer () => ToolTip(), -1500
         } else {
             ; Remote desktop clients (Windows App / Windows 365 run sessions in
-            ; msrdc.exe) drop Ctrl from a fast ^v and type a literal "v", and
-            ; need time to sync the clipboard to the remote side
+            ; msrdc.exe) don't sync the clipboard to the remote side before a
+            ; programmatic paste lands, so the remote clipboard gets pasted
+            ; instead. Type the text into the session rather than pasting.
             isRemote := WinActive("ahk_exe msrdc.exe")
-            prevClip := ClipboardAll()
-            A_Clipboard := text
-            Sleep isRemote ? 400 : 100
             if isRemote {
-                SendEvent("{Ctrl down}")
-                Sleep 50
-                SendEvent("{v}")
-                Sleep 50
-                SendEvent("{Ctrl up}")
+                SendText(text)
             } else {
+                prevClip := ClipboardAll()
+                A_Clipboard := text
+                Sleep 100
                 Send("^v")
             }
             if (autoSubmit && !isError) {
                 Sleep 300
                 SendEvent("{Enter}")
             }
-            ; Restoring too early lets the remote side paste the old clipboard
-            Sleep isRemote ? 1000 : 100
-            A_Clipboard := prevClip
+            if !isRemote {
+                Sleep 100
+                A_Clipboard := prevClip
+            }
         }
     }
 }
