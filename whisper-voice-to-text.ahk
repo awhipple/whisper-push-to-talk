@@ -133,10 +133,29 @@ OnPasteUp(*)
     StopRecording()
 }
 
-Hotkey HOTKEY_CLIPBOARD, OnClipboardDown
-Hotkey HOTKEY_CLIPBOARD . " Up", OnClipboardUp
-Hotkey HOTKEY_PASTE, OnPasteDown
-Hotkey HOTKEY_PASTE . " Up", OnPasteUp
+; "$" forces the keyboard hook (instead of RegisterHotKey) so the hotkeys can
+; win against other apps' hooks -- see WatchForRemoteDesktop below
+Hotkey "$" . HOTKEY_CLIPBOARD, OnClipboardDown
+Hotkey "$" . HOTKEY_CLIPBOARD . " Up", OnClipboardUp
+Hotkey "$" . HOTKEY_PASTE, OnPasteDown
+Hotkey "$" . HOTKEY_PASTE . " Up", OnPasteUp
+
+; Full-screen remote desktop clients (msrdc.exe) install their own keyboard
+; hook to forward every key to the remote machine. The most recently
+; installed hook sees keys first, so a session opened after this script
+; would swallow our hotkeys. Whenever a remote window gains focus, reinstall
+; our hook so it's first in line again. Only our own hotkeys are blocked;
+; every other key passes through to the remote session as normal.
+global gRemoteWasActive := false
+WatchForRemoteDesktop()
+{
+    global gRemoteWasActive
+    remoteActive := WinActive("ahk_exe msrdc.exe") != 0
+    if (remoteActive && !gRemoteWasActive)
+        InstallKeybdHook(true, true)
+    gRemoteWasActive := remoteActive
+}
+SetTimer WatchForRemoteDesktop, 250
 
 StartRecording()
 {
