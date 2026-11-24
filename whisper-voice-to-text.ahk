@@ -12,7 +12,6 @@ global FFMPEG_EXE := "ffmpeg"
 global RECORDING_FILE := A_Temp . "\whisper_recording.wav"
 global FIXED_FILE := A_Temp . "\whisper_fixed.wav"
 global MIC_NAME := "default"
-global HOTKEY_CLIPBOARD := "F11"
 global HOTKEY_PASTE := "F12"
 ; ============================================================
 
@@ -41,14 +40,12 @@ if !FileExist(configFile) {
         . "SOX_EXE := `"sox`"`r`n"
         . "FFMPEG_EXE := `"ffmpeg`"`r`n"
         . "MIC_NAME := `"default`"`r`n"
-        . "HOTKEY_CLIPBOARD := `"F11`"`r`n"
         . "HOTKEY_PASTE := `"F12`"`r`n"
     , configFile)
 }
 
 global recording := false
 global autoSubmit := false
-global clipboardOnly := false
 global toggleMode := false
 global recordStartTime := 0
 ; Tap-vs-hold threshold; also doubles as the sox startup delay before the "Recording..." tooltip appears.
@@ -73,38 +70,9 @@ StartWhisperServer()
 
 ; --- Hotkey handlers (bound dynamically so the keys are configurable) --------
 
-OnClipboardDown(*)
-{
-    global recording, toggleMode, recordStartTime, clipboardOnly, autoSubmit
-    if recording {
-        if toggleMode {
-            toggleMode := false
-            StopRecording()
-        }
-        return
-    }
-    clipboardOnly := true
-    autoSubmit := false
-    recordStartTime := A_TickCount
-    StartRecording()
-}
-
-OnClipboardUp(*)
-{
-    global recording, toggleMode, recordStartTime, HOTKEY_CLIPBOARD
-    if !recording
-        return
-    if (A_TickCount - recordStartTime < TAP_THRESHOLD_MS) {
-        toggleMode := true
-        ToolTip "Recording (tap " . HOTKEY_CLIPBOARD . " to stop)..."
-        return
-    }
-    StopRecording()
-}
-
 OnPasteDown(*)
 {
-    global recording, toggleMode, recordStartTime, clipboardOnly, autoSubmit
+    global recording, toggleMode, recordStartTime, autoSubmit
     if recording {
         if toggleMode {
             toggleMode := false
@@ -113,7 +81,6 @@ OnPasteDown(*)
         }
         return
     }
-    clipboardOnly := false
     autoSubmit := true
     recordStartTime := A_TickCount
     StartRecording()
@@ -135,22 +102,27 @@ OnPasteUp(*)
 
 ; "$" forces the keyboard hook (instead of RegisterHotKey) so the hotkeys can
 ; win against other apps' hooks -- see WatchForRemoteDesktop below
-Hotkey "$" . HOTKEY_CLIPBOARD, OnClipboardDown
-Hotkey "$" . HOTKEY_CLIPBOARD . " Up", OnClipboardUp
 Hotkey "$" . HOTKEY_PASTE, OnPasteDown
 Hotkey "$" . HOTKEY_PASTE . " Up", OnPasteUp
 
-; Full-screen remote desktop clients (msrdc.exe) install their own keyboard
-; hook to forward every key to the remote machine. The most recently
-; installed hook sees keys first, so a session opened after this script
-; would swallow our hotkeys. Whenever a remote window gains focus, reinstall
-; our hook so it's first in line again. Only our own hotkeys are blocked;
-; every other key passes through to the remote session as normal.
+; Remote desktop windows: Windows App / Windows 365 sessions (msrdc.exe),
+; classic Remote Desktop Connection (mstsc.exe), and Chrome Remote Desktop
+; (runs as chrome.exe, so match it by window title)
+GroupAdd "RemoteDesktop", "ahk_exe msrdc.exe"
+GroupAdd "RemoteDesktop", "ahk_exe mstsc.exe"
+GroupAdd "RemoteDesktop", "Chrome Remote Desktop ahk_exe chrome.exe"
+
+; Full-screen remote desktop clients install their own keyboard hook to
+; forward every key to the remote machine. The most recently installed hook
+; sees keys first, so a session opened after this script would swallow our
+; hotkeys. Whenever a remote window gains focus, reinstall our hook so it's
+; first in line again. Only our own hotkeys are blocked; every other key
+; passes through to the remote session as normal.
 global gRemoteWasActive := false
 WatchForRemoteDesktop()
 {
     global gRemoteWasActive
-    remoteActive := WinActive("ahk_exe msrdc.exe") != 0
+    remoteActive := WinActive("ahk_group RemoteDesktop") != 0
     if (remoteActive && !gRemoteWasActive)
         InstallKeybdHook(true, true)
     gRemoteWasActive := remoteActive
@@ -259,32 +231,31 @@ StopRecording()
     }
 
     if (text != "") {
-        if clipboardOnly {
-            A_Clipboard := text
-            ToolTip(isError ? "Whisper error copied to clipboard" : "Copied to clipboard")
-            SetTimer () => ToolTip(), -1500
+        ; Remote desktop clients (see the RemoteDesktop group above)
+        ; don't sync the clipboard to the remote side before a
+        ; programmatic paste lands, so the remote clipboard gets pasted
+        ; instead. Type the text into the session rather than pasting.
+        isRemote := WinActive("ahk_group RemoteDesktop")
+        if WinActive("Chrome Remote Desktop ahk_exe chrome.exe") {
+            ; Chrome Remote Desktop forwards keys by physical key code and
+            ; drops SendText's character-only (VK_PACKET) events, so press
+            ; the real keys (in one SendInput batch for speed)
+            SendInput("{Raw}" . text)
+        } else if isRemote {
+            SendText(text)
         } else {
-            ; Remote desktop clients (Windows App / Windows 365 run sessions in
-            ; msrdc.exe) don't sync the clipboard to the remote side before a
-            ; programmatic paste lands, so the remote clipboard gets pasted
-            ; instead. Type the text into the session rather than pasting.
-            isRemote := WinActive("ahk_exe msrdc.exe")
-            if isRemote {
-                SendText(text)
-            } else {
-                prevClip := ClipboardAll()
-                A_Clipboard := text
-                Sleep 100
-                Send("^v")
-            }
-            if (autoSubmit && !isError) {
-                Sleep 300
-                SendEvent("{Enter}")
-            }
-            if !isRemote {
-                Sleep 100
-                A_Clipboard := prevClip
-            }
+            prevClip := ClipboardAll()
+            A_Clipboard := text
+            Sleep 100
+            Send("^v")
+        }
+        if (autoSubmit && !isError) {
+            Sleep 300
+            SendEvent("{Enter}")
+        }
+        if !isRemote {
+            Sleep 100
+            A_Clipboard := prevClip
         }
     }
 }

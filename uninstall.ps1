@@ -18,7 +18,7 @@ function Warn($m) { Write-Host "    [warn] $m" -ForegroundColor Yellow }
 
 Write-Host "This will:"
 Write-Host "  - Stop the whisper push-to-talk script if it's running"
-Write-Host "  - Remove the '$TaskName' scheduled task (frees F11/F12 at next logon too)"
+Write-Host "  - Remove the '$TaskName' scheduled task (frees F12 at next logon too)"
 Write-Host "  - Delete $InstallDir"
 Write-Host "      (the .ahk script, config, sox, whisper.cpp, and the ~800 MB model)"
 Write-Host ""

@@ -400,7 +400,6 @@ MIC_NAME := "default"
 ; Hotkeys - use any single key name from the AHK v2 key list:
 ; https://www.autohotkey.com/docs/v2/KeyList.htm
 ; Only function keys (F1-F24) are supported.
-HOTKEY_CLIPBOARD := "F11"   ; clipboard-only mode
 HOTKEY_PASTE := "F12"       ; paste mode
 "@
     $configContent | Out-File -FilePath $ConfigFile -Encoding utf8 -Force
@@ -432,7 +431,6 @@ Write-Host ""
 Write-Host "Installation complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "Quick usage:"
-Write-Host "  F11  hold or tap to record, copies to your clipboard (configurable)"
 Write-Host "  F12  hold for paste + Enter, tap for paste-only (configurable)"
 Write-Host ""
 Write-Host "If you ever need to change the mic name or other settings, edit:"

@@ -2,23 +2,22 @@
 
 Push-to-talk voice transcription on Windows. Trigger a hotkey, speak, and your words land in whatever app has focus.
 
-- **F11** — clipboard-only mode. Copies the transcription to your clipboard (doesn't paste)
-- **F12** — paste mode. Pastes the transcription at your cursor
+- **F12** — pastes the transcription at your cursor
 
-Both hotkeys support two interaction styles:
+It supports two interaction styles:
 
 - **Hold-to-talk:** press and hold the key while speaking, release when done (walkie-talkie style)
 - **Tap-to-toggle:** tap once to start a hands-free recording, tap again to stop
 
-For F12, the interaction style also controls the submit behavior:
+The interaction style also controls the submit behavior:
 
 - **Hold F12** → paste **and press Enter** (great for chat boxes, prompts, etc.)
 - **Tap F12** → paste only (no Enter), so you can review before submitting
 
 ## How It Works
 
-1. Trigger **F11** or **F12** (hold or tap) → Sox starts recording from your microphone
-2. Stop recording (release the key, or tap the same key again) → Sox stops, ffmpeg fixes the WAV header, the audio is sent to a local whisper.cpp server for transcription, and the text is delivered to your cursor or clipboard
+1. Trigger **F12** (hold or tap) → Sox starts recording from your microphone
+2. Stop recording (release the key, or tap the same key again) → Sox stops, ffmpeg fixes the WAV header, the audio is sent to a local whisper.cpp server for transcription, and the text is delivered to your cursor
 
 A persistent `whisper-server` process runs in the background with the model loaded in VRAM, so transcriptions complete in ~1-2 seconds instead of the ~18 seconds that reloading the model every time would take.
 
@@ -41,7 +40,7 @@ The installer will:
 - Register a scheduled task that auto-launches the script at every logon (faster than the Startup folder — see [Auto-launch at logon](#auto-launch-at-logon) below)
 - Launch the script and open `config.local.ahk` in Notepad so you can tweak the mic name if needed
 
-Look for the "H" icon in your system tray when it finishes. Hold or tap F11/F12 and you're up and running.
+Look for the "H" icon in your system tray when it finishes. Hold or tap F12 and you're up and running.
 
 **Re-running `install.bat` is safe** — it works as an updater. Already-installed binaries are detected and skipped, the script is refreshed in place, and your `config.local.ahk` is preserved so any edits (like a custom `MIC_NAME`) stick around.
 
@@ -52,12 +51,12 @@ If anything fails, you can fall back to the manual steps below.
 Run `uninstall.bat` from this repo. After a "press Y to confirm" prompt, it will:
 
 - Stop the running script (filtered to only our process — won't affect any other AHK scripts you have running)
-- Remove the `WhisperPushToTalk` scheduled task (frees F11/F12 permanently, not just until next logon)
+- Remove the `WhisperPushToTalk` scheduled task (frees F12 permanently, not just until next logon)
 - Delete `%LOCALAPPDATA%\WhisperPushToTalk\` (the .ahk script, config, sox, whisper.cpp, and the ~800 MB model)
 
 **AutoHotkey and FFmpeg are deliberately left installed**, since they're common tools that other apps on your machine may rely on. If you're sure nothing else needs them, the uninstaller prints the exact `winget uninstall` commands to remove them yourself.
 
-**Just want F11/F12 back temporarily?** Right-click the "H" tray icon → **Exit**. The script stops immediately. (At next logon the scheduled task brings it back — to stop *that* too, run the full uninstaller.)
+**Just want F12 back temporarily?** Right-click the "H" tray icon → **Exit**. The script stops immediately. (At next logon the scheduled task brings it back — to stop *that* too, run the full uninstaller.)
 
 **Lost the repo and need to clean up manually?**
 
@@ -125,7 +124,6 @@ The settings:
 - `SOX_EXE` — path to `sox.exe` (or just `"sox"` if it's on your PATH)
 - `FFMPEG_EXE` — path to `ffmpeg.exe` (or just `"ffmpeg"` if it's on your PATH)
 - `MIC_NAME` — your microphone name (see below for how to find it)
-- `HOTKEY_CLIPBOARD` — key for clipboard-only mode (default: `"F11"`)
 - `HOTKEY_PASTE` — key for paste mode (default: `"F12"`)
 
 Only function keys (F1–F24) are supported. See the [AHK v2 key list](https://www.autohotkey.com/docs/v2/KeyList.htm) for valid names.
@@ -171,10 +169,9 @@ The script will launch at every login, just with the usual Windows Startup-folde
 1. Make sure the script is running — look for the **"H" icon** in your system tray. The installer launches it automatically and re-launches it at every logon. If you did a manual install, double-click `whisper-voice-to-text.ahk` to start it.
 2. Click into any text field — a browser, editor, chat window, etc.
 3. Start recording one of two ways:
-   - **Hold-to-talk:** press and hold **F11** or **F12** while you speak, then release
-   - **Tap-to-toggle:** tap **F11** or **F12** once to start a hands-free recording (the tooltip changes to "Recording (tap to stop)..."), then tap the same key again when you're done
+   - **Hold-to-talk:** press and hold **F12** while you speak, then release
+   - **Tap-to-toggle:** tap **F12** once to start a hands-free recording (the tooltip changes to "Recording (tap to stop)..."), then tap it again when you're done
 4. A "Processing..." tooltip appears while whisper transcribes, then the text is delivered:
-   - **F11** → copied to your clipboard
    - **F12 (held)** → pasted at your cursor, then **Enter** is pressed
    - **F12 (tapped)** → pasted at your cursor (no Enter — review before submitting)
 
@@ -210,4 +207,5 @@ If a recording is silent or shorter than 0.5 seconds, the script skips transcrip
 - Force-killing sox corrupts the WAV header, which is why ffmpeg is used as an intermediate fixup step
 - A `whisper-server` process runs in the background with the model loaded in VRAM (~900 MB GPU memory). It starts automatically with the script and is cleaned up on exit
 - The first transcription after launch may take a few extra seconds while the server finishes loading the model; subsequent transcriptions are near-instant on a GPU
-- F12 pastes via clipboard (Ctrl+V) but restores your previous clipboard contents afterward. F11 (clipboard-only mode) leaves the transcribed text on your clipboard.
+- F12 pastes via clipboard (Ctrl+V) but restores your previous clipboard contents afterward.
+- In remote desktop windows (Windows App / Windows 365, Remote Desktop Connection, Chrome Remote Desktop) the text is typed into the session instead of pasted, since the local clipboard doesn't reach the remote side in time. The script also re-claims F12 whenever one of those windows gains focus, so full-screen sessions don't swallow it.
